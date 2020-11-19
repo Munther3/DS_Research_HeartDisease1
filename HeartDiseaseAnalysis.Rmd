@@ -1,0 +1,276 @@
+---
+title: "Heart Disease"
+author: "Munther Alnghemshi"
+date: "11/19/2020"
+html_document:
+  toc: yes
+  toc_depth: '3'
+  df_print: paged
+---
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#Packages
+library(tidyverse)
+library(ggplot2)
+library(readr)
+library(ROCR)
+library(caret)
+library(gbm)
+library(corrplot)
+library(MASS)
+library(rpart)
+library(caTools)
+library(class)
+library(glmnet)
+library(Hmisc)
+library(pROC)
+library(scales)
+library(cluster)
+library(factoextra)
+library(corrplot)
+library(ggpubr)
+library(DT)
+ 
+
+```
+ 
+
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+
+
+# Introduction:
+
+_This data contain information related to factor responsible for Heart Attack, so our goal is to analyze the trends to predict a pattern or indications that could lead to a heart attack._
+
+## Attribute Information:
+_This database contains 13 attributes_
+ 
+
+| Variable | Description |
+|----------|-------------|
+|`Age`||
+|`Sex`| Male = 1, Female = 0 |
+| `Chest Pain` | 4 Values: Value 1: typical angina Value 2: atypical angina Value 3: non-anginal pain Value 4: asymptomatic  |
+| `trestbps` | Resting blood pressure (in mm Hg on admission to the hospital) |
+| `chol` | Serum cholestoral in mg|
+|`fbs`|(fasting blood sugar > 120 mg/dl) (1 = true; 0 = false)|
+|`restecg`|resting electrocardiographic results (values 0,1,2)|
+|`thalach`|Maximum heart rate achieved|
+|`exang`|Exercise induced angina (1 = yes; 0 = no)|
+|`oldpeak`|ST depression induced by exercise relative to rest|
+|`slope`|The slope of the peak exercise ST segment ( Value 1: upsloping, Value 2: flat, and Value 3: downsloping)|
+|`ca`|Number of major vessels (0-3) colored by flourosopy|
+| `thal`   | 3 = normal; 6 = fixed defect; 7 = reversable defect |
+ \
+ \
+ \
+ \
+ \
+ \
+ \
+ 
+## Data Overview:
+ _Below we can see the data table showing all attributes_
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+data <- read_csv("HeartD.csv")
+datatable(data)#showing the data
+ 
+ 
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ 
+```
+
+***
+### Averages:
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+cws <- data %>%
+  group_by(sex) %>%  #taking the avg by sex
+  summarise(NumberofPatients  = n(),
+            Avg_Age=mean(age), 
+            SD_Age= sd(age), 
+            Avg_ChestPain= mean(cp), 
+            Avg_trestbps= mean(trestbps), 
+            Avg_chol= mean(chol), 
+            Avg_thalach=mean(thalach))
+datatable(cws, caption = "All averages for the given values")  
+
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ra=range(data$age)
+me=mean(data$age)
+sd=sd(data$age)
+va=var(data$age)
+co=cor(data$age,data$target)
+
+```
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+#interpreting the values with respect to the first table above
+#cpoied the below code from kaggle: https://www.kaggle.com/utkarsh1997/heart-disease-prediction
+D2 <- data %>% 
+  mutate(sex = if_else(sex == 1, "MALE", "FEMALE"), #if sex is 1 then conver to male 
+         fbs = if_else(fbs == 1, ">120", "<=120"),
+         exang = if_else(exang == 1, "YES" ,"NO"),
+         cp = if_else(cp == 1, "ATYPICAL ANGINA",
+                      if_else(cp == 2, "NON-ANGINAL PAIN", "ASYMPTOMATIC")),
+         restecg = if_else(restecg == 0, "NORMAL",
+                           if_else(restecg == 1, "ABNORMALITY", "PROBABLE OR DEFINITE")),
+         slope = as.factor(slope),
+          
+         ca = as.factor(ca),
+         thal = as.factor(thal),
+         target = if_else(target == 1, "YES", "NO")
+         ) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  dplyr::select(target, sex, fbs, exang, cp, restecg, slope, ca, thal, everything())
+```
+***
+
+## Age Analysis:
+
+1. The age range goes form 34 up to 76 years old, and the average age is 55.7\
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+boxplot(data$age, col = "yellow", horizontal = TRUE, main= "Box Plot of Age") #showing the avg age of population
+
+```
+
+
+
+2. The SD is 9.41, which means that $95%$ of the population lay between the age group of 37 and 75 years\
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+hist(data$age, main = "Distribution of age", xlab= "Age", ylab = "Counts/Frequency", labels = TRUE)
+ 
+```
+
+
+3. There is a negative correlation $-0.207$ between age and target meaning that the higher the age number is the lower the probability of having a heart attack with respect to the given data set. 
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+ggplot(data,aes(x=age,y=target)) + geom_smooth()+ geom_point()+  ggtitle("Curve showing relation between Age and Target")
+ 
+```
+
+*** 
+
+## Sex Analysis:
+
+1.Approx 68% of the population is male and 32% is female \
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+percent=round(table(data$sex)/sum(table(data$sex))*100)
+ 
+paste=paste(percent,"%",sep=" ", c("Female","Male"))
+pie <- pie(table(data$sex), labels=paste, main = "Percentage of Male to Female")
+
+```
+\
+\
+2. 207 out of 303 patients are males and the rest are females\
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+bar <- barplot(table(D2$sex),
+        xlab="Gender",
+        ylab="Frequency",
+        main="Bar Plot of Sex")
+```
+
+
+
+3. We can conclude from the visualized data below that male are more likely to have a heart attack campared to felame population\
+
+
+ 
+ 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ 
+ggplot(D2,aes(x=sex,fill=target))+
+  geom_bar(alpha=.5)+
+  ggtitle("Sex count vs Heart attack presence")
+```
+***
+
+## Chest pain:
+1. 0-pain level is the most recorded value, after that comes pain-2 level
+ 
+```{r}
+ggplot(data, aes(x=cp,fill=target))+
+  geom_bar() 
+  
+```
+2. The average chest pain level is almost 1. 
+```{r}
+boxplot(data$cp, col = "red", horizontal = TRUE, main= "Box Plot of chest pain")
+
+```
+
+3. Patient with pain-2 level are more likely to have a heart attack 
+
+
+ 
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#finding wich pain level is likely to cause a H.A
+target1 <- data %>%  
+  filter(data$target==1) 
+ggplot(target1, aes(x=cp,fill=target))+
+  geom_bar()+
+  ggtitle("Pain level in the case of a heart attack")
+
+
+```
+4. Taking the fact that patiants with pain-2 level are more likely, the histo below shows the distribution of age with chest pain level 2 concluding that people from the age 50-55 are more likely to get a heart attack in the case of a chest pain level 2 (This pain level is more likely to cause a heart attack as explained above)
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+dd <- data %>% 
+  filter(data$cp==2)
+hist(dd$age, main = "Distribution of age with level pain =2", xlab= "Age", ylab = "Counts/Frequency", labels = TRUE)
+```
+
+***
+
+## Maximum heart rate:
+
+1.We can see below that as maximum heart rate increases a patient will be brone to a heart attack. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ 
+plot=ggplot(data,aes(x=thalach,y=target))+geom_point()
+
+
+plot+geom_smooth()+
+    scale_x_continuous(name="thalach")+
+    scale_y_continuous(name="Probability of Heart Attack")+
+    ggtitle("Relation Between Heart rate and getting a Heart attack")
+```
+
+
+## 	Exercise induced angina:
+As suggested by the curve below, as exang increases --> the chance of a heart attack increase. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot=ggplot(data,aes(x=exang,y=target))+geom_point()
+
+
+plot+geom_smooth()+
+    scale_x_continuous(name="exang")+
+    scale_y_continuous(name="Probability of Heart Attack")+
+    ggtitle("Relation Between Exercise induced angina and getting a Heart attack")
+```
+
+
+## OldPeak:
